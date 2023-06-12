@@ -1,8 +1,8 @@
 <template>
   <el-upload :action="uploadPath" :show-file-list="false" :headers="headers" :on-success="uploadPicUrl" fit="cover"
     :class="'avatar-uploader ' + (props.uploadClass ? props.uploadClass : '')" accept=".jpg,.jpeg,.png,.gif">
-    <img v-if="props.value" :src="props.value" class="avatar" :title="props.title">
-    <el-icon v-else :class="'avatar-uploader-icon ' + (props.uploadClass ? (props.uploadClass + '-icon') : '')" >
+    <img v-if="props.value" :src="props.value" class="avatar img" :title="props.title">
+    <el-icon v-else :class="'avatar-uploader-icon ' + (props.uploadClass ? (props.uploadClass + '-icon') : '')">
       <Plus />
     </el-icon>
   </el-upload>
@@ -13,10 +13,10 @@ import { _createStorage, uploadPath } from '@/api/pms/storageApi'
 import { useUserStore } from '@/store/user'
 const emit = defineEmits(['update:value'])
 var props = withDefaults(defineProps<{
-  value: string,
+  value: string | null | undefined,
   uploadClass?: string,
   title?: string
-}>(), { uploadClass: 'img-uploader',title:'' })
+}>(), { uploadClass: 'img-uploader', title: '' })
 const uploadPicUrl = (response: any) => {
   emit('update:value', response.data.url)
 }
@@ -49,6 +49,11 @@ const headers = computed(() => {
 
 .avatar-uploader .el-upload:hover {
   border-color: var(--el-color-primary);
+}
+
+.avatar-uploader .img {
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .el-icon.avatar-uploader-icon {

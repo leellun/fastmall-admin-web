@@ -33,13 +33,13 @@ const init = {
 }
 const emit = defineEmits(["update:value"])
 const props = withDefaults(defineProps<{
-    value: string
+    value: string|undefined|null
 }>(), {
     value: ''
 })
 const content = computed<string>({
     get() {
-        return props.value
+        return props.value as any
     },
     set(newValue) {
         emit("update:value", newValue)

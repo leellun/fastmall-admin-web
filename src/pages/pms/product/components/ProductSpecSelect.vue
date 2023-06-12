@@ -4,10 +4,10 @@
             <h3>商品规格</h3>
             <el-tabs type="border-card" v-model="tabPosition" style="margin-top: 10px;">
                 <el-tab-pane name="bind" label="已选择列表">
-                    <el-form v-for="filterItem in filterData" label-width="80px">
+                    <el-form v-for="(filterItem, i) in props.value" label-width="80px">
                         <el-form-item :label="filterItem.name + '：'">
                             <el-checkbox-group v-model="filterItem.goodsSpecs">
-                                <el-checkbox v-for="item in filterItem.values" :label="item">{{ item.value }}</el-checkbox>
+                                <el-checkbox v-for="item in saleAttrValues[i]" :label="item">{{ item.value }}</el-checkbox>
                             </el-checkbox-group>
                             <div style="flex-grow:1;justify-content:flex-end">
                                 <el-button type="danger" @click="handleAttributeDelete(filterItem)"
@@ -97,22 +97,31 @@
         <el-card class="box-card">
             <h3>商品库存</h3>
             <el-table :data="goodsProducts" v-if="props.value.length > 0">
-                <el-table-column property="goodsProductSpecRelations" v-for="(saleAttr, i) in props.value"
-                    :label="saleAttr.name">
+                <el-table-column prop="goodsProductSpecRelations" v-for="(saleAttr, i) in props.value"
+                    :label="saleAttr.name" width="200">
                     <template v-slot="{ row }">
-                        {{ row.goodsProductSpecRelations[i].value }}
+                        {{ i < row.goodsProductSpecRelations.length ? row.goodsProductSpecRelations[i].value : '' }}
+                            </template>
+                </el-table-column>
+                <el-table-column prop="price" width="200" label="货品售价">
+                    <template v-slot="{ row }">
+                        <el-input placeholder="货品售价" @input="(val: string) => { row.price = formatAmount(val) }"
+                            v-model="row.price" />
                     </template>
                 </el-table-column>
-                <el-table-column property="price" width="100" label="货品售价" />
-                <el-table-column property="number" width="100" label="货品数量" />
-                <el-table-column property="url" width="100" label="货品图片">
+                <el-table-column prop="number" width="200" label="货品数量">
+                    <template v-slot="{ row }">
+                        <el-input-number v-model="row.number" :min="1" />
+                    </template>
+                </el-table-column>
+                <el-table-column prop="url" label="货品图片">
                     <template v-slot="{ row }">
                         <SingleUpload v-model:value="row.url" upload-class="sale-attr-upload" />
                     </template>
                 </el-table-column>
                 <el-table-column align="center" label="操作" width="100" class-name="small-padding fixed-width">
                     <template v-slot="{ row }">
-                        <el-button type="primary" @click="handleProductDelete(row)">删除</el-button>
+                        <el-button type="danger" @click="handleProductDelete(row)">删除</el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -127,6 +136,7 @@ import type { GoodsSaleAttrVo, GoodsProductVo, GoodsSpecification } from '@/api/
 import type { ProductAttrWithValue } from '@/api/pms/productAttrApi'
 import { _getBindWithValue } from '@/api/pms/productAttrApi'
 import SingleUpload from '@/components/upload/SingleUpload.vue'
+import { formatAmount } from '@/utils/inputUtils'
 const emit = defineEmits(["update:value", "update:goodsProducts"])
 const props = withDefaults(defineProps<{
     groupId: any,
@@ -138,7 +148,6 @@ const props = withDefaults(defineProps<{
 const loading = ref<boolean>(false)
 const data = ref<Array<ProductAttrWithValue>>([]);
 const tabPosition = ref<string>('bind')
-const filterComputedData = ref<any>([])
 
 watch(() => props.groupId, (val: any) => {
     if (val == undefined || val === '') {
@@ -147,8 +156,9 @@ watch(() => props.groupId, (val: any) => {
         getLists();
     }
 })
-const filterData = computed<Array<any>>(() => {
-    let items = new Array<any>()
+//属性值列表
+const saleAttrValues = computed<Array<Array<GoodsSpecification>>>(() => {
+    let items = new Array<Array<GoodsSpecification>>()
     for (let vo of props.value) {
         let saleAttr = data.value.find(item => item.id == vo.goodsAttrId)
         let values = new Array<any>()
@@ -164,20 +174,17 @@ const filterData = computed<Array<any>>(() => {
                         goodsValueId: value.id,
                         name: vo.name,
                         value: value.value,
-                        picUrl: undefined
+                        picUrl: null
                     })
 
                 }
             }
-            items.push({
-                values,
-                ...vo
-            })
+            items.push(values)
         }
     }
-    filterComputedData.value = items
-    return filterComputedData.value;
+    return items;
 })
+// 可选列表
 const waitFilterData = computed(() => {
     if (props.value == undefined || props.value == null) return data.value;
     return data.value.filter(item => props.value.findIndex(selectItem => selectItem.name == item.name) == -1)
@@ -206,16 +213,19 @@ const getLists = () => {
         loading.value = false
     })
 }
+//删除属性
 const handleAttributeDelete = (row: any) => {
     const selectAttrs = props.value
     const index = selectAttrs.indexOf(row)
     selectAttrs.splice(index, 1)
 }
+//删除sku
 const handleProductDelete = (row: any) => {
     const goodsProducts = props.goodsProducts
     const index = goodsProducts.indexOf(row)
     goodsProducts.splice(index, 1)
 }
+//添加属性
 const handleAttributeAdd = (row: ProductAttrWithValue) => {
     const selectAttrs = props.value
     selectAttrs.push({
@@ -224,6 +234,7 @@ const handleAttributeAdd = (row: ProductAttrWithValue) => {
     } as any)
     emit('update:value', selectAttrs)
 }
+//同步sku
 const handleSyncSku = () => {
     if (props.value.length == 0) return;
     var oldGoodsProducts = props.goodsProducts;
@@ -231,28 +242,36 @@ const handleSyncSku = () => {
     createProductVos(props.value, oldGoodsProducts, 0, [], goodsProducts)
     emit('update:goodsProducts', goodsProducts)
 }
+//创建sku列表
 const createProductVos = (saleAttrVos: Array<GoodsSaleAttrVo>, cacheGoodsProducts: Array<GoodsProductVo>, i: number, goodsSpecs: Array<GoodsSpecification>, goodsProducts: Array<GoodsProductVo>) => {
     let saleAttrVo = saleAttrVos[i];
+    if (saleAttrVo.goodsSpecs.length == 0) {
+        createProductVos(saleAttrVos, cacheGoodsProducts, i + 1, goodsSpecs, goodsProducts)
+        return;
+    }
     if (i < saleAttrVos.length - 1) {
         for (let specification of saleAttrVo.goodsSpecs) {
             createProductVos(saleAttrVos, cacheGoodsProducts, i + 1, [...goodsSpecs, specification], goodsProducts)
         }
     } else {
-        let product = getProductVo(saleAttrVo.goodsSpecs, cacheGoodsProducts)
-        if (product == null) {
-            product = {
-                goodsProductSpecRelations: getGoodsProductSpecRelations(goodsSpecs),
-                price: undefined,
-                number: undefined,
-                url: undefined,
-            } as any
+        for (let specification of saleAttrVo.goodsSpecs) {
+            let currentGoodsSpecs = [...goodsSpecs, specification]
+            let product = getProductVo(currentGoodsSpecs, cacheGoodsProducts)
+            if (product == null) {
+                product = {
+                    goodsProductSpecRelations: getGoodsProductSpecRelations(currentGoodsSpecs),
+                    price: undefined,
+                    number: undefined,
+                    url: undefined,
+                } as any
+            }
+            goodsProducts.push(product as any)
         }
-        goodsProducts.push(product as any)
     }
 }
 //从缓存中获取product
 const getProductVo = (goodsSpecs: Array<GoodsSpecification>, cacheGoodsProducts: Array<GoodsProductVo>) => {
-    if (goodsSpecs.length != cacheGoodsProducts[0].goodsProductSpecRelations.length) return null
+    if (cacheGoodsProducts.length == 0 || goodsSpecs.length != cacheGoodsProducts[0].goodsProductSpecRelations.length) return null
     for (let i = 0; i < goodsSpecs.length; i++) {
         let tempProducts = []
         let goodsSpec = goodsSpecs[i];
@@ -271,6 +290,7 @@ const getProductVo = (goodsSpecs: Array<GoodsSpecification>, cacheGoodsProducts:
     }
     return null;
 }
+//通过规格列表获取 sku-规格 
 const getGoodsProductSpecRelations = (goodsSpecs: Array<GoodsSpecification>) => {
     let goodsProductSpecRelations = new Array<any>()
     for (let i = 0; i < goodsSpecs.length; i++) {
@@ -287,6 +307,11 @@ const getGoodsProductSpecRelations = (goodsSpecs: Array<GoodsSpecification>) => 
     return goodsProductSpecRelations;
 }
 </script>
+<style lang="scss" scoped>
+.el-card {
+    margin-bottom: 10px;
+}
+</style>
 <style lang="scss" >
 .sale-attr-upload .el-upload {
     width: 100px;
