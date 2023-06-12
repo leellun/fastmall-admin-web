@@ -50,12 +50,14 @@ export interface GoodsProduct extends BaseEntity {
 export interface GoodsProductSpecRelation extends BaseEntity {
   specId: any;
   productId: any;
+  goodsAttrId: any;
+  goodsValueId: any;
   itemSort: number;
   name: string;
   value: string;
 }
-export interface GoodsProductVo extends GoodsProduct{
-  goodsProductSpecRelations:Array<GoodsProductSpecRelation>
+export interface GoodsProductVo extends GoodsProduct {
+  goodsProductSpecRelations: Array<GoodsProductSpecRelation>
 }
 export interface GoodsAllinoneDTO {
   goods: Goods;
@@ -79,7 +81,7 @@ export interface BrandAndCategoryVO {
   categoryList: Array<CateVO>;
   brandList: Array<BrandVO>;
 }
-export interface GoodsSaleAttr extends BaseEntity{
+export interface GoodsSaleAttr extends BaseEntity {
   goodsId: any;
   goodsAttrId: any;
   name: string;

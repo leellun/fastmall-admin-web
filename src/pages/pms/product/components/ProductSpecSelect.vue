@@ -10,16 +10,20 @@
                                 <el-checkbox v-for="item in filterItem.values" :label="item">{{ item.value }}</el-checkbox>
                             </el-checkbox-group>
                             <div style="flex-grow:1;justify-content:flex-end">
-                                <el-button type="danger" @click="handleAttributeDelete(filterItem)" style="float:right">删除</el-button>
+                                <el-button type="danger" @click="handleAttributeDelete(filterItem)"
+                                    style="float:right">删除</el-button>
                             </div>
                         </el-form-item>
-                        <el-form-item >
+                        <el-form-item>
                             <el-form>
                                 <el-form-item v-for="item in filterItem.goodsSpecs" :label="item.value"
                                     style="margin-top: 10px;">
                                     <SingleUpload v-model:value="item.picUrl" upload-class="sale-attr-upload" />
                                 </el-form-item>
                             </el-form>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-button type="primary" @click="handleSyncSku">同步SKU</el-button>
                         </el-form-item>
                     </el-form>
                     <!-- <el-table :data="filterData">
@@ -90,19 +94,44 @@
                 </el-tab-pane>
             </el-tabs>
         </el-card>
+        <el-card class="box-card">
+            <h3>商品库存</h3>
+            <el-table :data="goodsProducts" v-if="props.value.length > 0">
+                <el-table-column property="goodsProductSpecRelations" v-for="(saleAttr, i) in props.value"
+                    :label="saleAttr.name">
+                    <template v-slot="{ row }">
+                        {{ row.goodsProductSpecRelations[i].value }}
+                    </template>
+                </el-table-column>
+                <el-table-column property="price" width="100" label="货品售价" />
+                <el-table-column property="number" width="100" label="货品数量" />
+                <el-table-column property="url" width="100" label="货品图片">
+                    <template v-slot="{ row }">
+                        <SingleUpload v-model:value="row.url" upload-class="sale-attr-upload" />
+                    </template>
+                </el-table-column>
+                <el-table-column align="center" label="操作" width="100" class-name="small-padding fixed-width">
+                    <template v-slot="{ row }">
+                        <el-button type="primary" @click="handleProductDelete(row)">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+
+        </el-card>
     </div>
 </template>
   
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { GoodsSaleAttrVo } from '@/api/pms/goodsApi'
+import type { GoodsSaleAttrVo, GoodsProductVo, GoodsSpecification } from '@/api/pms/goodsApi'
 import type { ProductAttrWithValue } from '@/api/pms/productAttrApi'
 import { _getBindWithValue } from '@/api/pms/productAttrApi'
 import SingleUpload from '@/components/upload/SingleUpload.vue'
-const emit = defineEmits(["update:value"])
+const emit = defineEmits(["update:value", "update:goodsProducts"])
 const props = withDefaults(defineProps<{
     groupId: any,
-    value: Array<GoodsSaleAttrVo>
+    value: Array<GoodsSaleAttrVo>,
+    goodsProducts: Array<GoodsProductVo>
 }>(), {
 })
 
@@ -110,7 +139,6 @@ const loading = ref<boolean>(false)
 const data = ref<Array<ProductAttrWithValue>>([]);
 const tabPosition = ref<string>('bind')
 const filterComputedData = ref<any>([])
-
 
 watch(() => props.groupId, (val: any) => {
     if (val == undefined || val === '') {
@@ -136,7 +164,7 @@ const filterData = computed<Array<any>>(() => {
                         goodsValueId: value.id,
                         name: vo.name,
                         value: value.value,
-                        picUrl: ''
+                        picUrl: undefined
                     })
 
                 }
@@ -183,6 +211,11 @@ const handleAttributeDelete = (row: any) => {
     const index = selectAttrs.indexOf(row)
     selectAttrs.splice(index, 1)
 }
+const handleProductDelete = (row: any) => {
+    const goodsProducts = props.goodsProducts
+    const index = goodsProducts.indexOf(row)
+    goodsProducts.splice(index, 1)
+}
 const handleAttributeAdd = (row: ProductAttrWithValue) => {
     const selectAttrs = props.value
     selectAttrs.push({
@@ -190,6 +223,68 @@ const handleAttributeAdd = (row: ProductAttrWithValue) => {
         name: row.name
     } as any)
     emit('update:value', selectAttrs)
+}
+const handleSyncSku = () => {
+    if (props.value.length == 0) return;
+    var oldGoodsProducts = props.goodsProducts;
+    let goodsProducts = new Array<GoodsProductVo>()
+    createProductVos(props.value, oldGoodsProducts, 0, [], goodsProducts)
+    emit('update:goodsProducts', goodsProducts)
+}
+const createProductVos = (saleAttrVos: Array<GoodsSaleAttrVo>, cacheGoodsProducts: Array<GoodsProductVo>, i: number, goodsSpecs: Array<GoodsSpecification>, goodsProducts: Array<GoodsProductVo>) => {
+    let saleAttrVo = saleAttrVos[i];
+    if (i < saleAttrVos.length - 1) {
+        for (let specification of saleAttrVo.goodsSpecs) {
+            createProductVos(saleAttrVos, cacheGoodsProducts, i + 1, [...goodsSpecs, specification], goodsProducts)
+        }
+    } else {
+        let product = getProductVo(saleAttrVo.goodsSpecs, cacheGoodsProducts)
+        if (product == null) {
+            product = {
+                goodsProductSpecRelations: getGoodsProductSpecRelations(goodsSpecs),
+                price: undefined,
+                number: undefined,
+                url: undefined,
+            } as any
+        }
+        goodsProducts.push(product as any)
+    }
+}
+//从缓存中获取product
+const getProductVo = (goodsSpecs: Array<GoodsSpecification>, cacheGoodsProducts: Array<GoodsProductVo>) => {
+    if (goodsSpecs.length != cacheGoodsProducts[0].goodsProductSpecRelations.length) return null
+    for (let i = 0; i < goodsSpecs.length; i++) {
+        let tempProducts = []
+        let goodsSpec = goodsSpecs[i];
+        for (let cacheGoodsProduct of cacheGoodsProducts) {
+            let relation = cacheGoodsProduct.goodsProductSpecRelations[i];
+            if (goodsSpec.goodsAttrId === relation.goodsAttrId && goodsSpec.goodsValueId === relation.goodsValueId) {
+                relation.name = goodsSpec.name
+                relation.value = goodsSpec.value
+                tempProducts.push(cacheGoodsProduct)
+            }
+        }
+        cacheGoodsProducts = tempProducts
+    }
+    if (cacheGoodsProducts.length > 0) {
+        return cacheGoodsProducts[0]
+    }
+    return null;
+}
+const getGoodsProductSpecRelations = (goodsSpecs: Array<GoodsSpecification>) => {
+    let goodsProductSpecRelations = new Array<any>()
+    for (let i = 0; i < goodsSpecs.length; i++) {
+        let goodsSpec = goodsSpecs[i]
+        goodsProductSpecRelations.push({
+            specId: goodsSpec.id,
+            goodsAttrId: goodsSpec.goodsAttrId,
+            goodsValueId: goodsSpec.goodsValueId,
+            itemSort: i,
+            name: goodsSpec.name,
+            value: goodsSpec.value
+        })
+    }
+    return goodsProductSpecRelations;
 }
 </script>
 <style lang="scss" >
